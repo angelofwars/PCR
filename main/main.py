@@ -1,78 +1,100 @@
 import flet as ft
+from config import PCRRecipe
+from exporter import PDFGenerator # Изменили ExcelGenerator на PDFGenerator
 
-def main(page: ft.Page):
-    # Настройки окна
-    page.title = "ПЦР Калькулятор"
-    page.window_width = 550
-    page.window_height = 650
-    page.theme_mode = ft.ThemeMode.DARK
-    page.horizontal_alignment = "center"
+class PCRApp:
+    def __init__(self, page: ft.Page):
+        self.page = page
+        self.recipe = PCRRecipe()  # Подключаем нашу базу
 
-    # Базовые объемы на 1 реакцию
-    vol_buffer = 2.0
-    vol_mgcl2 = 2.0
-    vol_dntps = 0.6
-    vol_primer_f = 0.1
-    vol_primer_r = 0.1
-    vol_h2o = 13.05
-    vol_taq = 0.15
-    vol_mastermix = 18.0
+        # Настройки окна
+        self.page.title = "ПЦР Калькулятор"
+        self.page.window_width = 550
+        self.page.window_height = 700
+        self.page.theme_mode = ft.ThemeMode.DARK
+        self.page.horizontal_alignment = "center"
 
-    # Элементы интерфейса (используем простые названия цветов)
-    title = ft.Text("🧬 Калькулятор ПЦР-смеси", size=24, weight="bold")
-    rxn_label = ft.Text("Количество реакций: 52", size=18, color="blue")
+        # Создаем элементы UI
+        self.title = ft.Text("🧬 Калькулятор ПЦР", size=24, weight="bold")
+        self.rxn_label = ft.Text("Количество реакций: 52", size=18, color="blue")
 
-    # Создаем пустую таблицу с заголовками колонок
-    table = ft.DataTable(
-        columns=[
-            ft.DataColumn(ft.Text("Реагент", weight="bold")),
-            ft.DataColumn(ft.Text("На 1 rxn (µL)", weight="bold"), numeric=True),
-            ft.DataColumn(ft.Text("Общий объем (µL)", weight="bold"), numeric=True),
-        ],
-        rows=[]
-    )
+        self.table = ft.DataTable(
+            columns=[
+                ft.DataColumn(ft.Text("Реагент", weight="bold")),
+                ft.DataColumn(ft.Text("На 1 rxn (µL)", weight="bold"), numeric=True),
+                ft.DataColumn(ft.Text("Общий объем", weight="bold"), numeric=True),
+            ],
+            rows=[]
+        )
 
-    # Функция, которая генерирует строки таблицы
-    def update_table(rxn):
-        table.rows = [
-            ft.DataRow(cells=[ft.DataCell(ft.Text("10x-буфер синтол")), ft.DataCell(ft.Text(f"{vol_buffer}")), ft.DataCell(ft.Text(f"{vol_buffer * rxn:.1f}"))]),
-            ft.DataRow(cells=[ft.DataCell(ft.Text("MgCl2 25 mM")), ft.DataCell(ft.Text(f"{vol_mgcl2}")), ft.DataCell(ft.Text(f"{vol_mgcl2 * rxn:.1f}"))]),
-            ft.DataRow(cells=[ft.DataCell(ft.Text("10mM dNTPs (Евроген)")), ft.DataCell(ft.Text(f"{vol_dntps}")), ft.DataCell(ft.Text(f"{vol_dntps * rxn:.1f}"))]),
-            ft.DataRow(cells=[ft.DataCell(ft.Text("Праймер_F (100 µM)")), ft.DataCell(ft.Text(f"{vol_primer_f}")), ft.DataCell(ft.Text(f"{vol_primer_f * rxn:.1f}"))]),
-            ft.DataRow(cells=[ft.DataCell(ft.Text("Праймер_R (100 µM)")), ft.DataCell(ft.Text(f"{vol_primer_r}")), ft.DataCell(ft.Text(f"{vol_primer_r * rxn:.1f}"))]),
-            ft.DataRow(cells=[ft.DataCell(ft.Text("H2O")), ft.DataCell(ft.Text(f"{vol_h2o}")), ft.DataCell(ft.Text(f"{vol_h2o * rxn:.1f}"))]),
-            ft.DataRow(cells=[ft.DataCell(ft.Text("HS-Taq-Полимераза")), ft.DataCell(ft.Text(f"{vol_taq}")), ft.DataCell(ft.Text(f"{vol_taq * rxn:.2f}"))]),
-            # Выделяем итоговую строку зеленым цветом (color="green")
+        self.slider = ft.Slider(
+            min=1, max=100, value=52, divisions=99, label="{value}",
+            on_change=self.on_slider_change
+        )
+
+        self.export_btn = ft.ElevatedButton(
+            "🖨 Создать PDF протокол",
+            icon="picture_as_pdf",
+            color="white",
+            bgcolor="red",  # Сделали красной, как логотип PDF
+            on_click=self.on_export
+        )
+
+        # Первая отрисовка
+        self.update_table(52)
+        self.build_ui()
+
+    def update_table(self, rxn):
+        self.table.rows.clear()
+
+        # Получаем данные из класса config.py
+        data = self.recipe.calculate(rxn)
+
+        for row in data:
+            self.table.rows.append(
+                ft.DataRow(cells=[
+                    ft.DataCell(ft.Text(str(row[0]))),
+                    ft.DataCell(ft.Text(str(row[1]))),
+                    ft.DataCell(ft.Text(str(row[2])))
+                ])
+            )
+
+        # Итоговая строка
+        self.table.rows.append(
             ft.DataRow(cells=[
                 ft.DataCell(ft.Text("Итого Mastermix", weight="bold", color="green")),
-                ft.DataCell(ft.Text(f"{vol_mastermix}", weight="bold", color="green")),
-                ft.DataCell(ft.Text(f"{vol_mastermix * rxn:.1f}", weight="bold", color="green"))
-            ]),
-        ]
+                ft.DataCell(ft.Text(str(self.recipe.mastermix), weight="bold", color="green")),
+                ft.DataCell(ft.Text(f"{self.recipe.mastermix * rxn:.1f}", weight="bold", color="green"))
+            ])
+        )
 
-    # Заполняем таблицу стартовыми значениями
-    update_table(52)
+    def on_slider_change(self, e):
+        rxn = int(e.control.value)
+        self.rxn_label.value = f"Количество реакций: {rxn}"
+        self.update_table(rxn)
+        self.page.update()
 
-    # Функция для ползунка
-    def slider_changed(e):
-        rxn_count = int(e.control.value)
-        rxn_label.value = f"Количество реакций: {rxn_count}"
-        update_table(rxn_count)
-        page.update()
+    def on_export(self, e):
+        rxn = int(self.slider.value)
+        data = self.recipe.calculate(rxn)
 
-    slider = ft.Slider(
-        min=1, max=100, value=52, divisions=99, label="{value}", on_change=slider_changed
-    )
+        # Теперь обращаемся к PDFGenerator
+        success, msg = PDFGenerator.create_protocol(rxn, data, self.recipe.mastermix)
 
-    # Собираем все элементы на странице
-    page.add(
-        title,
-        ft.Container(height=10),
-        rxn_label,
-        slider,
-        ft.Divider(),
-        table
-    )
+        color = "green" if success else "red"
+        self.page.show_snack_bar(ft.SnackBar(ft.Text(msg), bgcolor=color, open=True))
 
-# Запуск приложения
+    def build_ui(self):
+        self.page.add(
+            self.title, ft.Container(height=10),
+            self.rxn_label, self.slider, self.export_btn,
+            ft.Divider(), self.table
+        )
+
+
+# Точка входа в программу
+def main(page: ft.Page):
+    PCRApp(page)
+
+
 ft.app(target=main)
