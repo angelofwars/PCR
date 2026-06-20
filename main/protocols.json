@@ -1,0 +1,30 @@
+{
+    "Шаблон для Алисы (Стандарт)": {
+        "name": "Шаблон для Алисы (Стандарт)",
+        "buffer": 2.0,
+        "mgcl2": 2.0,
+        "dntps": 0.6,
+        "primer_f": 0.1,
+        "primer_r": 0.1,
+        "h2o": 13.05,
+        "taq": 0.15,
+        "primer1_name": "Праймер_F",
+        "primer2_name": "Праймер_R",
+        "program": "MAS30100",
+        "temp": "60°C"
+    },
+    "Vrn-A1c (EX1CF/IntrAR3)": {
+        "name": "Vrn-A1c (EX1CF/IntrAR3)",
+        "buffer": 2.0,
+        "mgcl2": 2.5,
+        "dntps": 0.6,
+        "primer_f": 0.5,
+        "primer_r": 0.5,
+        "h2o": 11.75,
+        "taq": 0.15,
+        "primer1_name": "EX1CF",
+        "primer2_name": "IntrAR3",
+        "program": "NAR3456",
+        "temp": "61°C"
+    }
+}
