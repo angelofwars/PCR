@@ -8,7 +8,7 @@ import platform
 class PDFGenerator:
     @staticmethod
     def create_protocol(rxn, data_rows, recipe, blocks_data, markers_list, programs_list, extra_rxn,
-                        filename="PCR_Protocol.pdf", auto_print=False):
+                        selected_amplifier=None, filename="PCR_Protocol.pdf", auto_print=False):
         pdf = FPDF()
         pdf.add_page()
 
@@ -61,7 +61,7 @@ class PDFGenerator:
         pdf.cell(15, 6, "rxn", border=1, align="C")
         pdf.ln(8)
 
-        # 4. Таблица реагентов
+        # 4. Table реагентов
         col_widths = [60, 25, 30]
         pdf.set_font("Arial", "B", 10)
 
@@ -73,7 +73,7 @@ class PDFGenerator:
 
         # Mastermix Итог
         pdf.set_font("Arial", "B", 11)
-        pdf.set_fill_color(220, 255, 220)  # Бледно-зеленый
+        pdf.set_fill_color(220, 255, 220)
         pdf.cell(col_widths[0], 7, "Mastermix", border=1, align="R", fill=True)
         pdf.cell(col_widths[1], 7, f"{recipe.mastermix} µL", border=1, align="C", fill=True)
         pdf.cell(col_widths[2], 7, f"{round(recipe.mastermix * rxn, 1)} µL", border=1, align="C", fill=True)
@@ -90,10 +90,8 @@ class PDFGenerator:
         pdf.cell(col_widths[2], 6, "", border=1)
         pdf.ln(10)
 
-        # ==========================================
-        # 5. УМНЫЙ ПОДВАЛ (ДВЕ КОЛОНКИ)
-        # ==========================================
-        y_start = pdf.get_y()  # Запоминаем высоту, чтобы потом нарисовать правую колонку
+        # 5. Подвал (Две колонки)
+        y_start = pdf.get_y()
 
         # --- ЛЕВАЯ КОЛОНКА ---
         pdf.set_font("Arial", "", 10)
@@ -107,31 +105,28 @@ class PDFGenerator:
         pdf.cell(55, 6, recipe.temp, border=1, align="C")
         pdf.ln()
 
-        # Динамические Маркеры (в столбик)
         if markers_list:
             pdf.set_fill_color(230, 230, 230)
             pdf.cell(80, 6, "Используемые Маркеры:", border=1, align="C", fill=True)
             pdf.ln()
             for m in markers_list:
-                pdf.set_text_color(0, 0, 200)  # Синий цвет для маркеров
+                pdf.set_text_color(0, 0, 200)
                 pdf.cell(80, 6, m, border=1, align="C")
                 pdf.set_text_color(0, 0, 0)
                 pdf.ln()
 
         pdf.ln(2)
         pdf.cell(25, 6, "Remarks:", border=1)
-        pdf.cell(55, 15, "", border=1)  # Поле для заметок
+        pdf.cell(55, 15, "", border=1)
         pdf.ln(17)
         pdf.cell(40, 6, "Work Carried Out By:", border=1)
         pdf.set_font("Arial", "B", 10)
         pdf.cell(40, 6, "A.N.", border=1, align="C")
 
         # --- ПРАВАЯ КОЛОНКА ---
-        # Возвращаемся наверх, но смещаемся вправо (x = 100)
         pdf.set_y(y_start)
         pdf.set_font("Arial", "", 10)
 
-        # Динамические Программы
         if programs_list:
             pdf.set_x(100)
             pdf.set_fill_color(230, 230, 230)
@@ -146,18 +141,23 @@ class PDFGenerator:
 
         pdf.ln(2)
 
-        # Список Амплификаторов с квадратиками (Чек-боксы)
+        # АВТОМАТИЧЕСКИЕ ГАЛОЧКИ / КРЕСТИКИ
         amplifiers = ["Eppendorf", "Eppendorf new", "Perkin Elmer", "C1000-1", "C1000-2", "Тетрада"]
         for amp in amplifiers:
             pdf.set_x(100)
             pdf.cell(30, 6, "Амплификатор:", border=1)
-            pdf.cell(8, 6, "", border=1)  # Пустой квадратик для галочки
+
+            # Если имя совпадает с выбранным в приложении, ставим жирный крестик "X"
+            checkmark = "X" if amp == selected_amplifier else ""
+            pdf.set_font("Arial", "B", 10)
+            pdf.cell(8, 6, checkmark, border=1, align="C")
+
+            pdf.set_font("Arial", "", 10)
             pdf.cell(35, 6, amp, border=1)
             pdf.ln()
 
         pdf.output(filename)
 
-        # Печать и просмотр
         try:
             current_os = platform.system()
             if auto_print:

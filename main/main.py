@@ -1,80 +1,75 @@
+import warnings
+
+warnings.filterwarnings("ignore", category=FutureWarning)
+
 import flet as ft
 from config import ProtocolDatabase
 from exporter import PDFGenerator
+from sheets_exporter import GoogleSheetsLogger
 
 
 class PCRApp:
     def __init__(self, page: ft.Page):
         self.page = page
         self.db = ProtocolDatabase()
+        self.google_logger = GoogleSheetsLogger()
         self.current_recipe = self.db.get_recipe(self.db.get_all_names()[0])
 
         self.page.title = "ПЦР Калькулятор"
         self.page.window_width = 750
-        self.page.window_height = 950  # Сделали окно чуть выше
+        self.page.window_height = 950
         self.page.theme_mode = ft.ThemeMode.DARK
         self.page.horizontal_alignment = "center"
         self.page.scroll = "auto"
 
         self.title = ft.Text("🧬 Калькулятор ПЦР", size=24, weight="bold")
 
-        self.recipe_dropdown = ft.Dropdown(
-            width=400,
-            options=[ft.dropdown.Option(name) for name in self.db.get_all_names()],
-            value=self.current_recipe.name,
-            on_change=self.on_recipe_change
-        )
-
-        self.edit_btn = ft.IconButton(icon="edit", tooltip="Изменить текущий", icon_color="blue",
+        self.recipe_dropdown = ft.Dropdown(width=400,
+                                           options=[ft.dropdown.Option(name) for name in self.db.get_all_names()],
+                                           value=self.current_recipe.name, on_change=self.on_recipe_change)
+        self.edit_btn = ft.IconButton(icon="edit", tooltip="Изменить", icon_color="blue",
                                       on_click=lambda e: self.open_editor(is_new=False))
-        self.new_btn = ft.IconButton(icon="add_box", tooltip="Создать новый", icon_color="green",
+        self.new_btn = ft.IconButton(icon="add_box", tooltip="Создать", icon_color="green",
                                      on_click=lambda e: self.open_editor(is_new=True))
         self.menu_row = ft.Row([self.recipe_dropdown, self.edit_btn, self.new_btn],
                                alignment=ft.MainAxisAlignment.CENTER)
 
-        # === 1. ДИНАМИЧЕСКИЕ МАРКЕРЫ ===
+        # 1. ДИНАМИЧЕСКИЕ МАРКЕРЫ
         self.marker_inputs = []
         self.markers_list_ui = ft.Column([], horizontal_alignment="center")
         self.add_marker_btn = ft.IconButton(icon="add_circle", icon_color="blue", icon_size=30,
-                                            on_click=self.add_marker, tooltip="Добавить маркер")
+                                            on_click=self.add_marker)
         self.rm_marker_btn = ft.IconButton(icon="remove_circle", icon_color="red", icon_size=30,
-                                           on_click=self.remove_marker, tooltip="Удалить маркер")
+                                           on_click=self.remove_marker)
         self.marker_controls_row = ft.Row(
             [ft.Text("Маркеры:", size=16, weight="bold"), self.add_marker_btn, self.rm_marker_btn],
             alignment=ft.MainAxisAlignment.CENTER)
         self.add_marker(update_ui=False)
-
         self.markers_wrapper = ft.Column([self.marker_controls_row, self.markers_list_ui],
                                          horizontal_alignment="center")
 
-        # === 2. ДИНАМИЧЕСКИЕ ПРОГРАММЫ ===
+        # 2. ДИНАМИЧЕСКИЕ ПРОГРАММЫ
         self.program_inputs = []
         self.programs_list_ui = ft.Column([], horizontal_alignment="center")
         self.add_prog_btn = ft.IconButton(icon="add_circle", icon_color="purple", icon_size=30,
-                                          on_click=self.add_program, tooltip="Добавить программу")
+                                          on_click=self.add_program)
         self.rm_prog_btn = ft.IconButton(icon="remove_circle", icon_color="red", icon_size=30,
-                                         on_click=self.remove_program, tooltip="Удалить программу")
+                                         on_click=self.remove_program)
         self.prog_controls_row = ft.Row(
             [ft.Text("Программы:", size=16, weight="bold"), self.add_prog_btn, self.rm_prog_btn],
             alignment=ft.MainAxisAlignment.CENTER)
-
         self.add_program(update_ui=False)
-        # Автоматически вставляем программу из рецепта
         self.program_inputs[0].value = self.current_recipe.program
-
         self.programs_wrapper = ft.Column([self.prog_controls_row, self.programs_list_ui],
                                           horizontal_alignment="center")
 
-        # === 3. ДИНАМИЧЕСКИЕ БЛОКИ ПЛАШЕК ===
+        # 3. ДИНАМИЧЕСКИЕ БЛОКИ ПЛАШЕК
         self.block_inputs = []
         self.blocks_list_ui = ft.Column([], horizontal_alignment="center")
-        self.add_btn = ft.IconButton(icon="add_circle", icon_color="green", icon_size=30, on_click=self.add_block,
-                                     tooltip="Добавить блок")
-        self.rm_btn = ft.IconButton(icon="remove_circle", icon_color="red", icon_size=30, on_click=self.remove_block,
-                                    tooltip="Удалить блок")
+        self.add_btn = ft.IconButton(icon="add_circle", icon_color="green", icon_size=30, on_click=self.add_block)
+        self.rm_btn = ft.IconButton(icon="remove_circle", icon_color="red", icon_size=30, on_click=self.remove_block)
         self.block_controls_row = ft.Row([ft.Text("Блоки плашек:", size=16, weight="bold"), self.add_btn, self.rm_btn],
                                          alignment=ft.MainAxisAlignment.CENTER)
-
         self.add_block(update_ui=False)
 
         self.extra_rxn = ft.TextField(label="Доп. реакции", width=120, value="8", text_align="center",
@@ -83,35 +78,40 @@ class PCRApp:
         self.current_rxn = 8
 
         self.blocks_wrapper = ft.Column([
-            self.block_controls_row,
-            self.blocks_list_ui,
+            self.block_controls_row, self.blocks_list_ui,
             ft.Row([ft.Text("Дополнительно:", size=16), self.extra_rxn], alignment=ft.MainAxisAlignment.CENTER),
-            ft.Container(height=5),
-            self.total_rxn_label
+            ft.Container(height=5), self.total_rxn_label
         ], horizontal_alignment="center")
 
         self.table = ft.DataTable(
-            columns=[
-                ft.DataColumn(ft.Text("Реагент", weight="bold")),
-                ft.DataColumn(ft.Text("На 1 rxn", weight="bold"), numeric=True),
-                ft.DataColumn(ft.Text("Общий объем", weight="bold"), numeric=True),
-            ],
-            rows=[]
+            columns=[ft.DataColumn(ft.Text("Реагент", weight="bold")),
+                     ft.DataColumn(ft.Text("На 1 rxn", weight="bold"), numeric=True),
+                     ft.DataColumn(ft.Text("Общий объем", weight="bold"), numeric=True)], rows=[]
         )
 
-        self.view_btn = ft.ElevatedButton("👀 Посмотреть PDF", icon="remove_red_eye", color="white", bgcolor="blue",
+        # Выбор амплификатора
+        self.amp_dropdown = ft.Dropdown(
+            label="Где ставим?", width=150,
+            options=[ft.dropdown.Option(a) for a in
+                     ["Eppendorf", "Eppendorf new", "Perkin Elmer", "C1000-1", "C1000-2", "Тетрада", "Несколько"]]
+        )
+
+        self.view_btn = ft.ElevatedButton("👀 PDF", icon="remove_red_eye", color="white", bgcolor="blue",
                                           on_click=self.on_view_click)
-        self.print_btn = ft.ElevatedButton("🖨 Печать PDF", icon="print", color="white", bgcolor="green",
+        self.print_btn = ft.ElevatedButton("🖨 Печать", icon="print", color="white", bgcolor="green",
                                            on_click=self.on_print_click)
-        self.buttons_row = ft.Row(controls=[self.view_btn, self.print_btn], alignment=ft.MainAxisAlignment.CENTER)
+        self.google_btn = ft.ElevatedButton("☁️ В Журнал", icon="cloud_upload", color="white", bgcolor="orange",
+                                            on_click=self.on_google_click)
+
+        self.buttons_row = ft.Row(controls=[self.amp_dropdown, self.view_btn, self.print_btn, self.google_btn],
+                                  alignment=ft.MainAxisAlignment.CENTER)
 
         self.update_table(self.current_rxn)
         self.build_ui()
 
-    # --- Функции Маркеров ---
     def add_marker(self, e=None, update_ui=True):
         i = len(self.marker_inputs) + 1
-        m_f = ft.TextField(label=f"Маркер {i} (напр. Vrn-A1c)", width=300)
+        m_f = ft.TextField(label=f"Маркер {i}", width=300)
         self.marker_inputs.append(m_f)
         self.markers_list_ui.controls = [ft.Row([m], alignment=ft.MainAxisAlignment.CENTER) for m in self.marker_inputs]
         if update_ui: self.page.update()
@@ -123,10 +123,9 @@ class PCRApp:
                                              self.marker_inputs]
             self.page.update()
 
-    # --- Функции Программ ---
     def add_program(self, e=None, update_ui=True):
         i = len(self.program_inputs) + 1
-        p_f = ft.TextField(label=f"Программа {i} (напр. MAS30100)", width=300)
+        p_f = ft.TextField(label=f"Программа {i}", width=300)
         self.program_inputs.append(p_f)
         self.programs_list_ui.controls = [ft.Row([p], alignment=ft.MainAxisAlignment.CENTER) for p in
                                           self.program_inputs]
@@ -139,10 +138,9 @@ class PCRApp:
                                               self.program_inputs]
             self.page.update()
 
-    # --- Функции Блоков ---
     def add_block(self, e=None, update_ui=True):
         i = len(self.block_inputs) + 1
-        name_f = ft.TextField(label=f"Блок {i} (напр. 1-12)", width=200, on_change=self.calculate_total)
+        name_f = ft.TextField(label=f"Блок {i}", width=200, on_change=self.calculate_total)
         count_f = ft.TextField(label="Шт", width=80, value="", text_align="center", on_change=self.calculate_total)
         self.block_inputs.append({"name": name_f, "count": count_f})
         self.blocks_list_ui.controls = [ft.Row([b["name"], b["count"]], alignment=ft.MainAxisAlignment.CENTER) for b in
@@ -157,30 +155,16 @@ class PCRApp:
             self.calculate_total()
 
     def calculate_total(self, e=None):
-        total = 0
-        for b in self.block_inputs:
-            try:
-                val = b["count"].value.strip()
-                if val: total += int(val)
-            except ValueError:
-                pass
-        try:
-            ext = self.extra_rxn.value.strip()
-            if ext: total += int(ext)
-        except ValueError:
-            pass
-
+        total = sum([int(b["count"].value.strip()) for b in self.block_inputs if b["count"].value.strip().isdigit()])
+        if self.extra_rxn.value.strip().isdigit(): total += int(self.extra_rxn.value.strip())
         self.current_rxn = total if total > 0 else 1
         self.total_rxn_label.value = f"Итого реакций: {self.current_rxn}"
         self.update_table(self.current_rxn)
         self.page.update()
 
-    # --- Смена рецепта и редактор ---
     def on_recipe_change(self, e):
         self.current_recipe = self.db.get_recipe(self.recipe_dropdown.value)
-        # Если сменили рецепт - подтягиваем его программу в первую строчку
-        if self.program_inputs:
-            self.program_inputs[0].value = self.current_recipe.program
+        if self.program_inputs: self.program_inputs[0].value = self.current_recipe.program
         self.update_table(self.current_rxn)
         self.page.update()
 
@@ -236,7 +220,7 @@ class PCRApp:
                 self.page.update()
                 self.page.open(ft.SnackBar(ft.Text("✅ Сохранено!"), bgcolor="green"))
             except ValueError:
-                self.page.open(ft.SnackBar(ft.Text("❌ Ошибка: В объемах должны быть только числа!"), bgcolor="red"))
+                self.page.open(ft.SnackBar(ft.Text("❌ Ошибка: Числа пишите через точку!"), bgcolor="red"))
 
         dialog = ft.AlertDialog(title=ft.Text("✏️ Редактор"), content=ft.Column(
             [name_f, ft.Row([buf_f, mg_f, dntp_f, taq_f]), ft.Row([prf_f, prr_f, h2o_f]), ft.Row([p1n_f, p2n_f]),
@@ -246,58 +230,54 @@ class PCRApp:
                                                            bgcolor="green")])
         self.page.open(dialog)
 
-    # --- Генерация ---
     def on_view_click(self, e):
         self.generate_document(auto_print=False)
 
     def on_print_click(self, e):
         self.generate_document(auto_print=True)
 
-    def generate_document(self, auto_print):
-        rxn = self.current_rxn
-        data = self.current_recipe.calculate(rxn)
-
-        # Собираем Маркеры в список (пропуская пустые)
-        active_markers = [m.value.strip() for m in self.marker_inputs if m.value.strip()]
-
-        # Собираем Программы в список (пропуская пустые)
-        active_programs = [p.value.strip() for p in self.program_inputs if p.value.strip()]
-
-        blocks_data = []
-        for b in self.block_inputs:
-            try:
-                cnt = int(b["count"].value.strip()) if b["count"].value.strip() else 0
-                blocks_data.append({"name": b["name"].value, "count": cnt})
-            except ValueError:
-                pass
-
-        try:
-            extra = int(self.extra_rxn.value.strip()) if self.extra_rxn.value.strip() else 0
-        except ValueError:
-            extra = 0
+    def on_google_click(self, e):
+        active_markers = ", ".join([m.value.strip() for m in self.marker_inputs if m.value.strip()])
+        active_programs = ", ".join([p.value.strip() for p in self.program_inputs if p.value.strip()])
+        amp = self.amp_dropdown.value if self.amp_dropdown.value else "Не указан"
+        total_mm = round(self.current_recipe.mastermix * self.current_rxn, 1)
 
         success, msg = PDFGenerator.create_protocol(
             rxn=rxn, data_rows=data, recipe=self.current_recipe, blocks_data=blocks_data,
-            markers_list=active_markers, programs_list=active_programs,  # Передаем списки
-            extra_rxn=extra, auto_print=auto_print
+            markers_list=active_markers, programs_list=active_programs, extra_rxn=extra,  # <- Поменяли на extra_rxn
+            selected_amplifier=self.amp_dropdown.value,
+            auto_print=auto_print
+        )
+        color = "green" if success else "red"
+        self.page.open(ft.SnackBar(ft.Text(msg), bgcolor=color))
+
+    def generate_document(self, auto_print):
+        rxn = self.current_rxn
+        data = self.current_recipe.calculate(rxn)
+        active_markers = [m.value.strip() for m in self.marker_inputs if m.value.strip()]
+        active_programs = [p.value.strip() for p in self.program_inputs if p.value.strip()]
+
+        blocks_data = [{"name": b["name"].value,
+                        "count": int(b["count"].value.strip()) if b["count"].value.strip().isdigit() else 0} for b in
+                       self.block_inputs]
+        extra = int(self.extra_rxn.value.strip()) if self.extra_rxn.value.strip().isdigit() else 0
+
+        # ТЕПЕРЬ МЫ ПЕРЕДАЕМ ВЫБРАННЫЙ АМПЛИФИКАТОР!
+        success, msg = PDFGenerator.create_protocol(
+            rxn=rxn, data_rows=data, recipe=self.current_recipe, blocks_data=blocks_data,
+            markers_list=active_markers, programs_list=active_programs, extra=extra,
+            selected_amplifier=self.amp_dropdown.value,  # Передаем значение из выпадающего списка
+            auto_print=auto_print
         )
         color = "green" if success else "red"
         self.page.open(ft.SnackBar(ft.Text(msg), bgcolor=color))
 
     def build_ui(self):
-        # Располагаем Маркеры и Программы в два столбца рядом
-        dynamic_inputs_row = ft.Row([
-            self.markers_wrapper,
-            ft.VerticalDivider(),  # Разделительная полоска между ними
-            self.programs_wrapper
-        ], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.START)
-
-        self.page.add(
-            self.title, self.menu_row, ft.Divider(),
-            dynamic_inputs_row,  # Добавили наш новый двойной ряд
-            ft.Divider(),
-            self.blocks_wrapper, self.buttons_row, ft.Divider(), self.table
-        )
+        dynamic_inputs_row = ft.Row([self.markers_wrapper, ft.VerticalDivider(), self.programs_wrapper],
+                                    alignment=ft.MainAxisAlignment.CENTER,
+                                    vertical_alignment=ft.CrossAxisAlignment.START)
+        self.page.add(self.title, self.menu_row, ft.Divider(), dynamic_inputs_row, ft.Divider(), self.blocks_wrapper,
+                      self.buttons_row, ft.Divider(), self.table)
 
 
 def main(page: ft.Page):
