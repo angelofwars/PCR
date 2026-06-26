@@ -4,7 +4,8 @@ import os
 
 class PCRRecipe:
     def __init__(self, name, buffer, mgcl2, dntps, primer_f, primer_r, h2o, taq,
-                 primer1_name="", primer2_name="", program="", temp=""):
+                 primer1_name="", primer2_name="", program="", temp="",
+                 primer_3=0.0, primer3_name=""):
         self.name = name
         self.buffer = buffer
         self.mgcl2 = mgcl2
@@ -19,20 +20,34 @@ class PCRRecipe:
         self.program = program
         self.temp = temp
 
+        # Данные 3-го праймера
+        self.primer_3 = primer_3
+        self.primer3_name = primer3_name
+
     @property
     def mastermix(self):
-        return round(self.buffer + self.mgcl2 + self.dntps + self.primer_f + self.primer_r + self.h2o + self.taq, 2)
+        return round(
+            self.buffer + self.mgcl2 + self.dntps + self.primer_f + self.primer_r + self.primer_3 + self.h2o + self.taq,
+            2)
 
     def calculate(self, rxn):
-        return [
+        rows = [
             ["10x-буфер", self.buffer, round(self.buffer * rxn, 2)],
             ["MgCl2", self.mgcl2, round(self.mgcl2 * rxn, 2)],
             ["dNTPs", self.dntps, round(self.dntps * rxn, 2)],
             [f"Праймер F", self.primer_f, round(self.primer_f * rxn, 2)],
             [f"Праймер R", self.primer_r, round(self.primer_r * rxn, 2)],
-            ["H2O", self.h2o, round(self.h2o * rxn, 2)],
-            ["Taq-Полимераза", self.taq, round(self.taq * rxn, 2)],
         ]
+
+        # Добавляем 3-й праймер в таблицу только если его объем больше 0
+        if self.primer_3 > 0:
+            rows.append([f"Праймер 3", self.primer_3, round(self.primer_3 * rxn, 2)])
+
+        rows.extend([
+            ["H2O", self.h2o, round(self.h2o * rxn, 2)],
+            ["Taq-Полимераза", self.taq, round(self.taq * rxn, 2)]
+        ])
+        return rows
 
     def to_dict(self):
         return self.__dict__
@@ -55,7 +70,6 @@ class ProtocolDatabase:
                 for k, v in data.items():
                     self.recipes[k] = PCRRecipe.from_dict(v)
         else:
-            # Шаблоны по умолчанию
             self.recipes["Стандарт (20 µL)"] = PCRRecipe(
                 "Стандарт (20 µL)", 2.0, 2.0, 0.6, 0.1, 0.1, 13.05, 0.15,
                 "Праймер_F", "Праймер_R", "MAS30100", "60°C"
@@ -85,7 +99,6 @@ class ProtocolDatabase:
 class SettingsManager:
     def __init__(self, filename="settings.json"):
         self.filename = filename
-        # Базовый список, если файла еще нет
         self.amplifiers = ["Eppendorf", "Eppendorf new", "Perkin Elmer", "C1000-1", "C1000-2", "Тетрада"]
         self.load()
 

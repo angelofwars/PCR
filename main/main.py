@@ -23,18 +23,14 @@ class PCRApp:
         self.page.scroll = "auto"
         self.page.horizontal_alignment = "center"
 
-        # === НАШИ СОБСТВЕННЫЕ ВКЛАДКИ (Обходим баг Python 3.9) ===
         self.tab_calc_btn = ft.ElevatedButton("🧬 Калькулятор", on_click=lambda e: self.switch_tab("calc"),
                                               color="white", bgcolor="blue")
         self.tab_set_btn = ft.ElevatedButton("⚙️ Настройки", on_click=lambda e: self.switch_tab("set"), color="white",
                                              bgcolor="grey")
         self.custom_tabs_row = ft.Row([self.tab_calc_btn, self.tab_set_btn], alignment=ft.MainAxisAlignment.CENTER)
 
-        # Контейнеры для содержимого вкладок
         self.calc_view = self.build_calc_tab()
         self.set_view = self.build_settings_tab()
-
-        # По умолчанию показываем калькулятор, а настройки скрываем
         self.set_view.visible = False
 
         self.page.add(
@@ -59,9 +55,6 @@ class PCRApp:
             self.tab_set_btn.bgcolor = "blue"
         self.page.update()
 
-    # ==========================================
-    # СОДЕРЖИМОЕ ВКЛАДКИ: КАЛЬКУЛЯТОР
-    # ==========================================
     def build_calc_tab(self):
         self.recipe_dropdown = ft.Dropdown(
             width=400,
@@ -77,7 +70,6 @@ class PCRApp:
         self.menu_row = ft.Row([self.recipe_dropdown, self.edit_btn, self.new_btn],
                                alignment=ft.MainAxisAlignment.CENTER)
 
-        # 1. МАРКЕРЫ
         self.marker_inputs = []
         self.markers_list_ui = ft.Column([], horizontal_alignment="center")
         self.add_marker_btn = ft.IconButton(icon="add_circle", icon_color="blue", icon_size=30,
@@ -91,7 +83,6 @@ class PCRApp:
         self.markers_wrapper = ft.Column([self.marker_controls_row, self.markers_list_ui],
                                          horizontal_alignment="center")
 
-        # 2. ПРОГРАММЫ
         self.program_inputs = []
         self.programs_list_ui = ft.Column([], horizontal_alignment="center")
         self.add_prog_btn = ft.IconButton(icon="add_circle", icon_color="purple", icon_size=30,
@@ -102,11 +93,10 @@ class PCRApp:
             [ft.Text("Программы:", size=16, weight="bold"), self.add_prog_btn, self.rm_prog_btn],
             alignment=ft.MainAxisAlignment.CENTER)
         self.add_program(update_ui=False)
-        self.program_inputs[0].value = self.current_recipe.program
+        self.program_inputs[0].value = getattr(self.current_recipe, 'program', '')
         self.programs_wrapper = ft.Column([self.prog_controls_row, self.programs_list_ui],
                                           horizontal_alignment="center")
 
-        # 3. БЛОКИ ПЛАШЕК
         self.block_inputs = []
         self.blocks_list_ui = ft.Column([], horizontal_alignment="center")
         self.add_btn = ft.IconButton(icon="add_circle", icon_color="green", icon_size=30, on_click=self.add_block)
@@ -135,7 +125,6 @@ class PCRApp:
             rows=[]
         )
 
-        # 4. ЧЕК-БОКСЫ АМПЛИФИКАТОРОВ
         self.amp_checkboxes_row = ft.Row([], wrap=True, alignment=ft.MainAxisAlignment.CENTER)
         self.amps_wrapper = ft.Column([
             ft.Text("Где ставим? (можно выбрать несколько):", size=16, weight="bold", color="blue"),
@@ -165,9 +154,6 @@ class PCRApp:
             ft.Row([self.table], alignment=ft.MainAxisAlignment.CENTER)
         ], horizontal_alignment="center")
 
-    # ==========================================
-    # СОДЕРЖИМОЕ ВКЛАДКИ: НАСТРОЙКИ
-    # ==========================================
     def build_settings_tab(self):
         title = ft.Text("⚙️ Настройки Амплификаторов", size=24, weight="bold")
 
@@ -217,9 +203,6 @@ class PCRApp:
         self.refresh_settings_list()
         self.refresh_amp_checkboxes()
 
-    # ==========================================
-    # ЛОГИКА КАЛЬКУЛЯТОРА
-    # ==========================================
     def add_marker(self, e=None, update_ui=True):
         i = len(self.marker_inputs) + 1
         m_f = ft.TextField(label=f"Маркер {i}", width=300)
@@ -275,7 +258,7 @@ class PCRApp:
 
     def on_recipe_change(self, e):
         self.current_recipe = self.db.get_recipe(self.recipe_dropdown.value)
-        if self.program_inputs: self.program_inputs[0].value = self.current_recipe.program
+        if self.program_inputs: self.program_inputs[0].value = getattr(self.current_recipe, 'program', '')
         self.update_table(self.current_rxn)
         self.page.update()
 
@@ -303,21 +286,28 @@ class PCRApp:
             r = PCRRecipe("Новый протокол", 2.0, 2.0, 0.6, 0.1, 0.1, 13.05, 0.15)
 
         name_f = ft.TextField(label="Название протокола", value=r.name if not is_new else "", expand=True)
-        buf_f = ft.TextField(label="Буфер", value=str(r.buffer), width=100)
-        mg_f = ft.TextField(label="MgCl2", value=str(r.mgcl2), width=100)
-        dntp_f = ft.TextField(label="dNTPs", value=str(r.dntps), width=100)
-        prf_f = ft.TextField(label="Пр. F", value=str(r.primer_f), width=100)
-        prr_f = ft.TextField(label="Пр. R", value=str(r.primer_r), width=100)
-        h2o_f = ft.TextField(label="H2O", value=str(r.h2o), width=100)
-        taq_f = ft.TextField(label="Taq", value=str(r.taq), width=100)
+        buf_f = ft.TextField(label="Буфер", value=str(r.buffer), width=80)
+        mg_f = ft.TextField(label="MgCl2", value=str(r.mgcl2), width=80)
+        dntp_f = ft.TextField(label="dNTPs", value=str(r.dntps), width=80)
+        taq_f = ft.TextField(label="Taq", value=str(r.taq), width=80)
+
+        prf_f = ft.TextField(label="Пр. F", value=str(r.primer_f), width=80)
+        prr_f = ft.TextField(label="Пр. R", value=str(r.primer_r), width=80)
+        pr3_f = ft.TextField(label="Пр. 3", value=str(getattr(r, 'primer_3', 0.0)), width=80)
+        h2o_f = ft.TextField(label="H2O", value=str(r.h2o), width=80)
+
         p1n_f = ft.TextField(label="Праймер 1", value=r.primer1_name, expand=True)
         p2n_f = ft.TextField(label="Праймер 2", value=r.primer2_name, expand=True)
-        prog_f = ft.TextField(label="Программа по умолч.", value=r.program, expand=True)
-        temp_f = ft.TextField(label="Температура", value=r.temp, width=150)
+        p3n_f = ft.TextField(label="Праймер 3", value=getattr(r, 'primer3_name', ""), expand=True)
+
+        prog_f = ft.TextField(label="Программа по умолч.", value=getattr(r, 'program', ''), expand=True)
+        temp_f = ft.TextField(label="Температура", value=getattr(r, 'temp', ''), width=150)
 
         def save_click(e):
             try:
                 from config import PCRRecipe
+                p3_val = float(pr3_f.value.replace(',', '.')) if pr3_f.value.strip() else 0.0
+
                 new_recipe = PCRRecipe(
                     name=name_f.value,
                     buffer=float(buf_f.value.replace(',', '.')),
@@ -330,13 +320,15 @@ class PCRApp:
                     primer1_name=p1n_f.value,
                     primer2_name=p2n_f.value,
                     program=prog_f.value,
-                    temp=temp_f.value
+                    temp=temp_f.value,
+                    primer_3=p3_val,
+                    primer3_name=p3n_f.value
                 )
                 self.db.add_or_update(new_recipe)
                 self.recipe_dropdown.options = [ft.dropdown.Option(n) for n in self.db.get_all_names()]
                 self.recipe_dropdown.value = new_recipe.name
                 self.current_recipe = new_recipe
-                if self.program_inputs: self.program_inputs[0].value = new_recipe.program
+                if self.program_inputs: self.program_inputs[0].value = getattr(new_recipe, 'program', '')
                 self.update_table(self.current_rxn)
                 self.page.close(dialog)
                 self.page.update()
@@ -349,8 +341,8 @@ class PCRApp:
             content=ft.Column([
                 name_f,
                 ft.Row([buf_f, mg_f, dntp_f, taq_f]),
-                ft.Row([prf_f, prr_f, h2o_f]),
-                ft.Row([p1n_f, p2n_f]),
+                ft.Row([prf_f, prr_f, pr3_f, h2o_f]),
+                ft.Row([p1n_f, p2n_f, p3n_f]),
                 ft.Row([prog_f, temp_f])
             ], tight=True),
             actions=[

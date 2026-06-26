@@ -98,13 +98,21 @@ class PDFGenerator:
         # --- ЛЕВАЯ КОЛОНКА ---
         pdf.set_font("Arial", "", 10)
         pdf.cell(25, 6, "Праймер 1:", border=1)
-        pdf.cell(55, 6, recipe.primer1_name, border=1, align="C")
+        pdf.cell(55, 6, getattr(recipe, 'primer1_name', ''), border=1, align="C")
         pdf.ln()
         pdf.cell(25, 6, "Праймер 2:", border=1)
-        pdf.cell(55, 6, recipe.primer2_name, border=1, align="C")
+        pdf.cell(55, 6, getattr(recipe, 'primer2_name', ''), border=1, align="C")
         pdf.ln()
+
+        # Если есть 3-й праймер, выводим его
+        p3_name = getattr(recipe, 'primer3_name', '')
+        if p3_name:
+            pdf.cell(25, 6, "Праймер 3:", border=1)
+            pdf.cell(55, 6, p3_name, border=1, align="C")
+            pdf.ln()
+
         pdf.cell(25, 6, "Ann. Temp:", border=1)
-        pdf.cell(55, 6, recipe.temp, border=1, align="C")
+        pdf.cell(55, 6, getattr(recipe, 'temp', ''), border=1, align="C")
         pdf.ln()
 
         if markers_list:
@@ -143,7 +151,6 @@ class PDFGenerator:
 
         pdf.ln(2)
 
-        # ТЕПЕРЬ СПИСОК ПРИБОРОВ БЕРЕТСЯ ИЗ ПЕРЕДАННЫХ НАСТРОЕК
         for amp in all_amplifiers:
             pdf.set_x(100)
             pdf.cell(30, 6, "Амплификатор:", border=1)
