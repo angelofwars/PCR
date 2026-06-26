@@ -7,8 +7,11 @@ import platform
 
 class PDFGenerator:
     @staticmethod
-    def create_protocol(rxn, data_rows, recipe, blocks_data, markers_list, programs_list, extra_rxn,
-                        selected_amplifier=None, filename="PCR_Protocol.pdf", auto_print=False):
+    def create_protocol(rxn, data_rows, recipe, blocks_data, markers_list, programs_list, extra_rxn, all_amplifiers,
+                        selected_amplifiers=None, filename="PCR_Protocol.pdf", auto_print=False):
+        if selected_amplifiers is None:
+            selected_amplifiers = []
+
         pdf = FPDF()
         pdf.add_page()
 
@@ -35,13 +38,13 @@ class PDFGenerator:
         pdf.cell(30, 6, date_str, border=1, align="C")
         pdf.ln(8)
 
-        # 2. Блоки (Список плашек)
+        # 2. Блоки
         pdf.set_font("Arial", "", 10)
         for block in blocks_data:
             if block['name'] or block['count'] > 0:
                 pdf.cell(20, 6, "Блок:", border=1)
                 pdf.cell(50, 6, block['name'], border=1, align="C")
-                pdf.set_fill_color(255, 255, 153)  # Желтый фон
+                pdf.set_fill_color(255, 255, 153)
                 pdf.cell(20, 6, str(block['count']) if block['count'] > 0 else "", border=1, align="C", fill=True)
                 pdf.ln()
 
@@ -51,7 +54,7 @@ class PDFGenerator:
         pdf.cell(20, 6, str(extra_rxn), border=1, align="C", fill=True)
         pdf.ln(8)
 
-        # 3. PCR Setup строка
+        # 3. PCR Setup
         pdf.set_font("Arial", "B", 11)
         total_vol = round(recipe.mastermix + 2.0, 1)
 
@@ -61,17 +64,16 @@ class PDFGenerator:
         pdf.cell(15, 6, "rxn", border=1, align="C")
         pdf.ln(8)
 
-        # 4. Table реагентов
+        # 4. Table
         col_widths = [60, 25, 30]
         pdf.set_font("Arial", "B", 10)
-
         for row in data_rows:
             pdf.cell(col_widths[0], 6, str(row[0]), border=1, align="R")
             pdf.cell(col_widths[1], 6, str(row[1]) + " µL", border=1, align="C")
             pdf.cell(col_widths[2], 6, str(row[2]) + " µL", border=1, align="C")
             pdf.ln()
 
-        # Mastermix Итог
+        # Mastermix
         pdf.set_font("Arial", "B", 11)
         pdf.set_fill_color(220, 255, 220)
         pdf.cell(col_widths[0], 7, "Mastermix", border=1, align="R", fill=True)
@@ -90,7 +92,7 @@ class PDFGenerator:
         pdf.cell(col_widths[2], 6, "", border=1)
         pdf.ln(10)
 
-        # 5. Подвал (Две колонки)
+        # 5. Подвал
         y_start = pdf.get_y()
 
         # --- ЛЕВАЯ КОЛОНКА ---
@@ -141,14 +143,12 @@ class PDFGenerator:
 
         pdf.ln(2)
 
-        # АВТОМАТИЧЕСКИЕ ГАЛОЧКИ / КРЕСТИКИ
-        amplifiers = ["Eppendorf", "Eppendorf new", "Perkin Elmer", "C1000-1", "C1000-2", "Тетрада"]
-        for amp in amplifiers:
+        # ТЕПЕРЬ СПИСОК ПРИБОРОВ БЕРЕТСЯ ИЗ ПЕРЕДАННЫХ НАСТРОЕК
+        for amp in all_amplifiers:
             pdf.set_x(100)
             pdf.cell(30, 6, "Амплификатор:", border=1)
 
-            # Если имя совпадает с выбранным в приложении, ставим жирный крестик "X"
-            checkmark = "X" if amp == selected_amplifier else ""
+            checkmark = "X" if amp in selected_amplifiers else ""
             pdf.set_font("Arial", "B", 10)
             pdf.cell(8, 6, checkmark, border=1, align="C")
 

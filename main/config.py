@@ -55,12 +55,11 @@ class ProtocolDatabase:
                 for k, v in data.items():
                     self.recipes[k] = PCRRecipe.from_dict(v)
         else:
-            # Шаблон на 20 мкл
+            # Шаблоны по умолчанию
             self.recipes["Стандарт (20 µL)"] = PCRRecipe(
                 "Стандарт (20 µL)", 2.0, 2.0, 0.6, 0.1, 0.1, 13.05, 0.15,
                 "Праймер_F", "Праймер_R", "MAS30100", "60°C"
             )
-            # НОВЫЙ Шаблон на 16 мкл из вашего скриншота
             self.recipes["Анализ (16 µL)"] = PCRRecipe(
                 "Анализ (16 µL)", 1.6, 1.0, 0.3, 0.5, 0.5, 10.0, 0.1,
                 "Ex1/C/F", "Intr1/B/R3", "MAS30100", "60°C"
@@ -81,3 +80,33 @@ class ProtocolDatabase:
 
     def get_all_names(self):
         return list(self.recipes.keys())
+
+
+class SettingsManager:
+    def __init__(self, filename="settings.json"):
+        self.filename = filename
+        # Базовый список, если файла еще нет
+        self.amplifiers = ["Eppendorf", "Eppendorf new", "Perkin Elmer", "C1000-1", "C1000-2", "Тетрада"]
+        self.load()
+
+    def load(self):
+        if os.path.exists(self.filename):
+            with open(self.filename, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                self.amplifiers = data.get("amplifiers", self.amplifiers)
+        else:
+            self.save()
+
+    def save(self):
+        with open(self.filename, 'w', encoding='utf-8') as f:
+            json.dump({"amplifiers": self.amplifiers}, f, ensure_ascii=False, indent=4)
+
+    def add_amplifier(self, name):
+        if name and name not in self.amplifiers:
+            self.amplifiers.append(name)
+            self.save()
+
+    def remove_amplifier(self, name):
+        if name in self.amplifiers:
+            self.amplifiers.remove(name)
+            self.save()

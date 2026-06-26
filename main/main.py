@@ -3,7 +3,7 @@ import warnings
 warnings.filterwarnings("ignore", category=FutureWarning)
 
 import flet as ft
-from config import ProtocolDatabase
+from config import ProtocolDatabase, SettingsManager
 from exporter import PDFGenerator
 from sheets_exporter import GoogleSheetsLogger
 
@@ -12,6 +12,7 @@ class PCRApp:
     def __init__(self, page: ft.Page):
         self.page = page
         self.db = ProtocolDatabase()
+        self.settings = SettingsManager()
         self.google_logger = GoogleSheetsLogger()
         self.current_recipe = self.db.get_recipe(self.db.get_all_names()[0])
 
@@ -19,14 +20,56 @@ class PCRApp:
         self.page.window_width = 750
         self.page.window_height = 950
         self.page.theme_mode = ft.ThemeMode.DARK
-        self.page.horizontal_alignment = "center"
         self.page.scroll = "auto"
+        self.page.horizontal_alignment = "center"
 
-        self.title = ft.Text("🧬 Калькулятор ПЦР", size=24, weight="bold")
+        # === НАШИ СОБСТВЕННЫЕ ВКЛАДКИ (Обходим баг Python 3.9) ===
+        self.tab_calc_btn = ft.ElevatedButton("🧬 Калькулятор", on_click=lambda e: self.switch_tab("calc"),
+                                              color="white", bgcolor="blue")
+        self.tab_set_btn = ft.ElevatedButton("⚙️ Настройки", on_click=lambda e: self.switch_tab("set"), color="white",
+                                             bgcolor="grey")
+        self.custom_tabs_row = ft.Row([self.tab_calc_btn, self.tab_set_btn], alignment=ft.MainAxisAlignment.CENTER)
 
-        self.recipe_dropdown = ft.Dropdown(width=400,
-                                           options=[ft.dropdown.Option(name) for name in self.db.get_all_names()],
-                                           value=self.current_recipe.name, on_change=self.on_recipe_change)
+        # Контейнеры для содержимого вкладок
+        self.calc_view = self.build_calc_tab()
+        self.set_view = self.build_settings_tab()
+
+        # По умолчанию показываем калькулятор, а настройки скрываем
+        self.set_view.visible = False
+
+        self.page.add(
+            ft.Container(height=10),
+            self.custom_tabs_row,
+            ft.Divider(),
+            self.calc_view,
+            self.set_view
+        )
+        self.update_table(self.current_rxn)
+
+    def switch_tab(self, tab_name):
+        if tab_name == "calc":
+            self.calc_view.visible = True
+            self.set_view.visible = False
+            self.tab_calc_btn.bgcolor = "blue"
+            self.tab_set_btn.bgcolor = "grey"
+        else:
+            self.calc_view.visible = False
+            self.set_view.visible = True
+            self.tab_calc_btn.bgcolor = "grey"
+            self.tab_set_btn.bgcolor = "blue"
+        self.page.update()
+
+    # ==========================================
+    # СОДЕРЖИМОЕ ВКЛАДКИ: КАЛЬКУЛЯТОР
+    # ==========================================
+    def build_calc_tab(self):
+        self.recipe_dropdown = ft.Dropdown(
+            width=400,
+            options=[ft.dropdown.Option(name) for name in self.db.get_all_names()],
+            value=self.current_recipe.name,
+            on_change=self.on_recipe_change
+        )
+
         self.edit_btn = ft.IconButton(icon="edit", tooltip="Изменить", icon_color="blue",
                                       on_click=lambda e: self.open_editor(is_new=False))
         self.new_btn = ft.IconButton(icon="add_box", tooltip="Создать", icon_color="green",
@@ -34,7 +77,7 @@ class PCRApp:
         self.menu_row = ft.Row([self.recipe_dropdown, self.edit_btn, self.new_btn],
                                alignment=ft.MainAxisAlignment.CENTER)
 
-        # 1. ДИНАМИЧЕСКИЕ МАРКЕРЫ
+        # 1. МАРКЕРЫ
         self.marker_inputs = []
         self.markers_list_ui = ft.Column([], horizontal_alignment="center")
         self.add_marker_btn = ft.IconButton(icon="add_circle", icon_color="blue", icon_size=30,
@@ -48,7 +91,7 @@ class PCRApp:
         self.markers_wrapper = ft.Column([self.marker_controls_row, self.markers_list_ui],
                                          horizontal_alignment="center")
 
-        # 2. ДИНАМИЧЕСКИЕ ПРОГРАММЫ
+        # 2. ПРОГРАММЫ
         self.program_inputs = []
         self.programs_list_ui = ft.Column([], horizontal_alignment="center")
         self.add_prog_btn = ft.IconButton(icon="add_circle", icon_color="purple", icon_size=30,
@@ -63,7 +106,7 @@ class PCRApp:
         self.programs_wrapper = ft.Column([self.prog_controls_row, self.programs_list_ui],
                                           horizontal_alignment="center")
 
-        # 3. ДИНАМИЧЕСКИЕ БЛОКИ ПЛАШЕК
+        # 3. БЛОКИ ПЛАШЕК
         self.block_inputs = []
         self.blocks_list_ui = ft.Column([], horizontal_alignment="center")
         self.add_btn = ft.IconButton(icon="add_circle", icon_color="green", icon_size=30, on_click=self.add_block)
@@ -84,17 +127,21 @@ class PCRApp:
         ], horizontal_alignment="center")
 
         self.table = ft.DataTable(
-            columns=[ft.DataColumn(ft.Text("Реагент", weight="bold")),
-                     ft.DataColumn(ft.Text("На 1 rxn", weight="bold"), numeric=True),
-                     ft.DataColumn(ft.Text("Общий объем", weight="bold"), numeric=True)], rows=[]
+            columns=[
+                ft.DataColumn(ft.Text("Реагент", weight="bold")),
+                ft.DataColumn(ft.Text("На 1 rxn", weight="bold"), numeric=True),
+                ft.DataColumn(ft.Text("Общий объем", weight="bold"), numeric=True)
+            ],
+            rows=[]
         )
 
-        # Выбор амплификатора
-        self.amp_dropdown = ft.Dropdown(
-            label="Где ставим?", width=150,
-            options=[ft.dropdown.Option(a) for a in
-                     ["Eppendorf", "Eppendorf new", "Perkin Elmer", "C1000-1", "C1000-2", "Тетрада", "Несколько"]]
-        )
+        # 4. ЧЕК-БОКСЫ АМПЛИФИКАТОРОВ
+        self.amp_checkboxes_row = ft.Row([], wrap=True, alignment=ft.MainAxisAlignment.CENTER)
+        self.amps_wrapper = ft.Column([
+            ft.Text("Где ставим? (можно выбрать несколько):", size=16, weight="bold", color="blue"),
+            self.amp_checkboxes_row
+        ], horizontal_alignment="center")
+        self.refresh_amp_checkboxes()
 
         self.view_btn = ft.ElevatedButton("👀 PDF", icon="remove_red_eye", color="white", bgcolor="blue",
                                           on_click=self.on_view_click)
@@ -102,13 +149,77 @@ class PCRApp:
                                            on_click=self.on_print_click)
         self.google_btn = ft.ElevatedButton("☁️ В Журнал", icon="cloud_upload", color="white", bgcolor="orange",
                                             on_click=self.on_google_click)
-
-        self.buttons_row = ft.Row(controls=[self.amp_dropdown, self.view_btn, self.print_btn, self.google_btn],
+        self.buttons_row = ft.Row(controls=[self.view_btn, self.print_btn, self.google_btn],
                                   alignment=ft.MainAxisAlignment.CENTER)
 
-        self.update_table(self.current_rxn)
-        self.build_ui()
+        dynamic_inputs_row = ft.Row([self.markers_wrapper, ft.VerticalDivider(), self.programs_wrapper],
+                                    alignment=ft.MainAxisAlignment.CENTER,
+                                    vertical_alignment=ft.CrossAxisAlignment.START)
 
+        return ft.Column([
+            self.menu_row, ft.Divider(),
+            dynamic_inputs_row, ft.Divider(),
+            self.blocks_wrapper, ft.Divider(),
+            self.amps_wrapper, ft.Container(height=5),
+            self.buttons_row, ft.Divider(),
+            ft.Row([self.table], alignment=ft.MainAxisAlignment.CENTER)
+        ], horizontal_alignment="center")
+
+    # ==========================================
+    # СОДЕРЖИМОЕ ВКЛАДКИ: НАСТРОЙКИ
+    # ==========================================
+    def build_settings_tab(self):
+        title = ft.Text("⚙️ Настройки Амплификаторов", size=24, weight="bold")
+
+        self.new_amp_input = ft.TextField(label="Название нового амплификатора", width=300)
+        add_btn = ft.ElevatedButton("Добавить", icon="add", color="white", bgcolor="green",
+                                    on_click=self.on_add_amp_click)
+
+        self.amps_list_ui = ft.Column([], horizontal_alignment="center")
+        self.refresh_settings_list()
+
+        return ft.Column([
+            ft.Container(height=20),
+            ft.Row([title], alignment=ft.MainAxisAlignment.CENTER),
+            ft.Divider(),
+            ft.Row([self.new_amp_input, add_btn], alignment=ft.MainAxisAlignment.CENTER),
+            ft.Container(height=20),
+            self.amps_list_ui
+        ], horizontal_alignment="center")
+
+    def refresh_settings_list(self):
+        self.amps_list_ui.controls.clear()
+        for amp in self.settings.amplifiers:
+            self.amps_list_ui.controls.append(
+                ft.Row([
+                    ft.Text(amp, size=16, width=200),
+                    ft.IconButton(icon="delete", icon_color="red", tooltip="Удалить",
+                                  on_click=lambda e, a=amp: self.on_delete_amp_click(a))
+                ], alignment=ft.MainAxisAlignment.CENTER)
+            )
+        self.page.update()
+
+    def refresh_amp_checkboxes(self):
+        self.amp_checkboxes = {amp: ft.Checkbox(label=amp, value=False) for amp in self.settings.amplifiers}
+        self.amp_checkboxes_row.controls = list(self.amp_checkboxes.values())
+        self.page.update()
+
+    def on_add_amp_click(self, e):
+        val = self.new_amp_input.value.strip()
+        if val:
+            self.settings.add_amplifier(val)
+            self.new_amp_input.value = ""
+            self.refresh_settings_list()
+            self.refresh_amp_checkboxes()
+
+    def on_delete_amp_click(self, amp_name):
+        self.settings.remove_amplifier(amp_name)
+        self.refresh_settings_list()
+        self.refresh_amp_checkboxes()
+
+    # ==========================================
+    # ЛОГИКА КАЛЬКУЛЯТОРА
+    # ==========================================
     def add_marker(self, e=None, update_ui=True):
         i = len(self.marker_inputs) + 1
         m_f = ft.TextField(label=f"Маркер {i}", width=300)
@@ -173,12 +284,17 @@ class PCRApp:
         data = self.current_recipe.calculate(rxn)
         for row in data:
             self.table.rows.append(ft.DataRow(
-                cells=[ft.DataCell(ft.Text(str(row[0]))), ft.DataCell(ft.Text(str(row[1]))),
-                       ft.DataCell(ft.Text(str(row[2])))]))
-        self.table.rows.append(ft.DataRow(cells=[ft.DataCell(ft.Text("Итого Mastermix", weight="bold", color="green")),
-                                                 ft.DataCell(ft.Text(str(self.current_recipe.mastermix), weight="bold",
-                                                                     color="green")), ft.DataCell(
-                ft.Text(f"{self.current_recipe.mastermix * rxn:.1f}", weight="bold", color="green"))]))
+                cells=[
+                    ft.DataCell(ft.Text(str(row[0]))),
+                    ft.DataCell(ft.Text(str(row[1]))),
+                    ft.DataCell(ft.Text(str(row[2])))
+                ]))
+        self.table.rows.append(ft.DataRow(
+            cells=[
+                ft.DataCell(ft.Text("Итого Mastermix", weight="bold", color="green")),
+                ft.DataCell(ft.Text(str(self.current_recipe.mastermix), weight="bold", color="green")),
+                ft.DataCell(ft.Text(f"{self.current_recipe.mastermix * rxn:.1f}", weight="bold", color="green"))
+            ]))
 
     def open_editor(self, is_new=False):
         r = self.current_recipe
@@ -202,14 +318,20 @@ class PCRApp:
         def save_click(e):
             try:
                 from config import PCRRecipe
-                new_recipe = PCRRecipe(name=name_f.value, buffer=float(buf_f.value.replace(',', '.')),
-                                       mgcl2=float(mg_f.value.replace(',', '.')),
-                                       dntps=float(dntp_f.value.replace(',', '.')),
-                                       primer_f=float(prf_f.value.replace(',', '.')),
-                                       primer_r=float(prr_f.value.replace(',', '.')),
-                                       h2o=float(h2o_f.value.replace(',', '.')),
-                                       taq=float(taq_f.value.replace(',', '.')), primer1_name=p1n_f.value,
-                                       primer2_name=p2n_f.value, program=prog_f.value, temp=temp_f.value)
+                new_recipe = PCRRecipe(
+                    name=name_f.value,
+                    buffer=float(buf_f.value.replace(',', '.')),
+                    mgcl2=float(mg_f.value.replace(',', '.')),
+                    dntps=float(dntp_f.value.replace(',', '.')),
+                    primer_f=float(prf_f.value.replace(',', '.')),
+                    primer_r=float(prr_f.value.replace(',', '.')),
+                    h2o=float(h2o_f.value.replace(',', '.')),
+                    taq=float(taq_f.value.replace(',', '.')),
+                    primer1_name=p1n_f.value,
+                    primer2_name=p2n_f.value,
+                    program=prog_f.value,
+                    temp=temp_f.value
+                )
                 self.db.add_or_update(new_recipe)
                 self.recipe_dropdown.options = [ft.dropdown.Option(n) for n in self.db.get_all_names()]
                 self.recipe_dropdown.value = new_recipe.name
@@ -222,12 +344,20 @@ class PCRApp:
             except ValueError:
                 self.page.open(ft.SnackBar(ft.Text("❌ Ошибка: Числа пишите через точку!"), bgcolor="red"))
 
-        dialog = ft.AlertDialog(title=ft.Text("✏️ Редактор"), content=ft.Column(
-            [name_f, ft.Row([buf_f, mg_f, dntp_f, taq_f]), ft.Row([prf_f, prr_f, h2o_f]), ft.Row([p1n_f, p2n_f]),
-             ft.Row([prog_f, temp_f])], tight=True),
-                                actions=[ft.TextButton("Отмена", on_click=lambda e: self.page.close(dialog)),
-                                         ft.ElevatedButton("Сохранить", on_click=save_click, color="white",
-                                                           bgcolor="green")])
+        dialog = ft.AlertDialog(
+            title=ft.Text("✏️ Редактор"),
+            content=ft.Column([
+                name_f,
+                ft.Row([buf_f, mg_f, dntp_f, taq_f]),
+                ft.Row([prf_f, prr_f, h2o_f]),
+                ft.Row([p1n_f, p2n_f]),
+                ft.Row([prog_f, temp_f])
+            ], tight=True),
+            actions=[
+                ft.TextButton("Отмена", on_click=lambda e: self.page.close(dialog)),
+                ft.ElevatedButton("Сохранить", on_click=save_click, color="white", bgcolor="green")
+            ]
+        )
         self.page.open(dialog)
 
     def on_view_click(self, e):
@@ -239,15 +369,20 @@ class PCRApp:
     def on_google_click(self, e):
         active_markers = ", ".join([m.value.strip() for m in self.marker_inputs if m.value.strip()])
         active_programs = ", ".join([p.value.strip() for p in self.program_inputs if p.value.strip()])
-        amp = self.amp_dropdown.value if self.amp_dropdown.value else "Не указан"
         total_mm = round(self.current_recipe.mastermix * self.current_rxn, 1)
 
-        success, msg = PDFGenerator.create_protocol(
-            rxn=rxn, data_rows=data, recipe=self.current_recipe, blocks_data=blocks_data,
-            markers_list=active_markers, programs_list=active_programs, extra_rxn=extra,  # <- Поменяли на extra_rxn
-            selected_amplifier=self.amp_dropdown.value,
-            auto_print=auto_print
+        selected_amps = [name for name, cb in self.amp_checkboxes.items() if cb.value]
+        amp_str = ", ".join(selected_amps) if selected_amps else "Не указан"
+
+        success, msg = self.google_logger.log_experiment(
+            protocol_name=self.current_recipe.name,
+            markers=active_markers,
+            programs=active_programs,
+            rxn_count=self.current_rxn,
+            mastermix_vol=total_mm,
+            amplifier=amp_str
         )
+
         color = "green" if success else "red"
         self.page.open(ft.SnackBar(ft.Text(msg), bgcolor=color))
 
@@ -262,22 +397,23 @@ class PCRApp:
                        self.block_inputs]
         extra = int(self.extra_rxn.value.strip()) if self.extra_rxn.value.strip().isdigit() else 0
 
-        # ТЕПЕРЬ МЫ ПЕРЕДАЕМ ВЫБРАННЫЙ АМПЛИФИКАТОР!
+        selected_amps = [name for name, cb in self.amp_checkboxes.items() if cb.value]
+
         success, msg = PDFGenerator.create_protocol(
-            rxn=rxn, data_rows=data, recipe=self.current_recipe, blocks_data=blocks_data,
-            markers_list=active_markers, programs_list=active_programs, extra=extra,
-            selected_amplifier=self.amp_dropdown.value,  # Передаем значение из выпадающего списка
+            rxn=rxn,
+            data_rows=data,
+            recipe=self.current_recipe,
+            blocks_data=blocks_data,
+            markers_list=active_markers,
+            programs_list=active_programs,
+            extra_rxn=extra,
+            all_amplifiers=self.settings.amplifiers,
+            selected_amplifiers=selected_amps,
             auto_print=auto_print
         )
+
         color = "green" if success else "red"
         self.page.open(ft.SnackBar(ft.Text(msg), bgcolor=color))
-
-    def build_ui(self):
-        dynamic_inputs_row = ft.Row([self.markers_wrapper, ft.VerticalDivider(), self.programs_wrapper],
-                                    alignment=ft.MainAxisAlignment.CENTER,
-                                    vertical_alignment=ft.CrossAxisAlignment.START)
-        self.page.add(self.title, self.menu_row, ft.Divider(), dynamic_inputs_row, ft.Divider(), self.blocks_wrapper,
-                      self.buttons_row, ft.Divider(), self.table)
 
 
 def main(page: ft.Page):
