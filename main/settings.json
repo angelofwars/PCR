@@ -1,10 +1,13 @@
 {
     "amplifiers": [
-        "Eppendorf",
-        "Eppendorf new",
-        "Perkin Elmer",
-        "BIO-RAD C1000-1",
-        "BIO-RAD C1000-2",
-        "Тетрада"
+        "Eppendorf nexus (Сдвоенный)",
+        "Eppendorf nexus (Сдвоенный) 2",
+        "Eppendorf Mastercycler x50a",
+        "MiniAmp Plus",
+        "BIO-RAD C1000-1 15",
+        "BIO-RAD C1000-2 15",
+        "BIO-RAD C1000-1 61",
+        "BIO-RAD C1000-2 61",
+        "Черепашка"
     ]
 }
